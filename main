@@ -89,6 +89,24 @@ from telethon.sessions import StringSession
 
 async def main():
     client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+
+async def main():
+    await client.start()
+    me = await client.get_me()
+    owner_id = me.id
+    bot_start_time = datetime.now()
+    logger.info(f"✅ البوت يعمل الآن كـ {me.first_name} [{me.id}]")
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
+        if event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+        elif event.is_private:
+            await event.reply("👋 أهلاً بك! سورس المصطفى يعمل بنجاح.")
+
+    await client.run_until_disconnected()
+
+asyncio.run(main())
     await client.start()
     me = await client.get_me()
     owner_id = me.id
@@ -96,7 +114,7 @@ async def main():
     logger.info(f"✅ البوت يعمل الآن كـ {me.first_name} [{me.id}]")
     await client.run_until_disconnected()
 
-loop = asyncio.get_event_loop()
+asyncio.run(main())
 loop.run_until_complete(main())
 
 # --- الآن يمكن استخدامه بشكل آمن ---
@@ -1097,6 +1115,24 @@ from datetime import datetime
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 async def main():
+    await client.start()
+    me = await client.get_me()
+    owner_id = me.id
+    bot_start_time = datetime.now()
+    logger.info(f"✅ البوت يعمل الآن كـ {me.first_name} [{me.id}]")
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
+        if event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+        elif event.is_private:
+            await event.reply("👋 أهلاً بك! سورس المصطفى يعمل بنجاح.")
+
+    await client.run_until_disconnected()
+
+asyncio.run(main())
+
+async def main():
     logger.info("⏳ بدء تشغيل سورس المصطفى...")
     await client.start()
     me = await client.get_me()
@@ -1115,6 +1151,24 @@ from datetime import datetime
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 async def main():
+    await client.start()
+    me = await client.get_me()
+    owner_id = me.id
+    bot_start_time = datetime.now()
+    logger.info(f"✅ البوت يعمل الآن كـ {me.first_name} [{me.id}]")
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
+        if event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+        elif event.is_private:
+            await event.reply("👋 أهلاً بك! سورس المصطفى يعمل بنجاح.")
+
+    await client.run_until_disconnected()
+
+asyncio.run(main())
+
+async def main():
     logger.info("⏳ بدء تشغيل سورس المصطفى...")
     await client.start()
     me = await client.get_me()
@@ -1128,7 +1182,7 @@ asyncio.run(main())
     # التأكد من وجود مجلد التنزيلات
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 BOT_DOWNLOAD_PATH = os.path.join(BASE_PATH, "Bot_Downloads")
-loop = asyncio.get_event_loop()
+asyncio.run(main())
 try:
     loop.run_until_complete(main())
 except KeyboardInterrupt:
