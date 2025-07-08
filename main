@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # ==================================================================================
 # ===   سورس المصطفى - v63 (Configurable, Feature-Rich, Bug-Fixed with correct imports) ===
 # ==================================================================================
@@ -24,11 +22,6 @@ from datetime import datetime, timedelta, time
 from telethon import events
 import time
 import io
-# import shutil # تم الاحتفاظ بها احتياطياً لوظائف مستقبلية
-# import zipfile # لم يتم استخدامه في الوظائف الحالية
-# import base64 # لم يتم استخدامه في الوظائف الحالية
-# import glob # لم يتم استخدامه في الوظائف الحالية
-# import re # لم يتم استخدامه في الوظائف الحالية
 
 try:
     import fitz  # PyMuPDF
@@ -52,11 +45,9 @@ except ImportError:
 ENV_FOLDER = os.path.join("D:\\MyTelegramBot", "evn")
 ENV_FILE_PATH = os.path.join(ENV_FOLDER, "env_variables.ini")
 
-# تأكد من وجود المجلد
 if not os.path.exists(ENV_FOLDER):
     os.makedirs(ENV_FOLDER)
 
-# إذا الملف غير موجود، أنشئه مع قيم افتراضية
 if not os.path.exists(ENV_FILE_PATH):
     config = configparser.ConfigParser()
     config["TELEGRAM"] = {
@@ -99,6 +90,42 @@ async def main():
 
     @client.on(events.NewMessage)
     async def welcome(event):
+        if event.is_private:
+            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
+        elif event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+
+    await client.run_until_disconnected()
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
+        if event.is_private:
+            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
+        elif event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+
+    await client.run_until_disconnected()
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
+        if event.is_private:
+            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
+        elif event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+
+    await client.run_until_disconnected()
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
+        if event.is_private:
+            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
+        elif event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+
+    await client.run_until_disconnected()
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
         if event.is_group:
             await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
         elif event.is_private:
@@ -106,12 +133,19 @@ async def main():
 
     await client.run_until_disconnected()
 
-asyncio.run(main())
+async def main():
     await client.start()
     me = await client.get_me()
     owner_id = me.id
     bot_start_time = datetime.now()
     logger.info(f"✅ البوت يعمل الآن كـ {me.first_name} [{me.id}]")
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
+        if event.is_private:
+            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
+        elif event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
     await client.run_until_disconnected()
 
 asyncio.run(main())
@@ -191,7 +225,6 @@ def calculate_price(pages_count):
     """حساب السعر بناءً على عدد الصفحات والأسعار المحددة."""
     price_per_page = PRICE_PER_PAGE_LT50 if pages_count < 50 else PRICE_PER_PAGE_GTE50
     base_price = pages_count * price_per_page
-    # التقريب لأعلى لأقرب 250 وحدة لكلا السعرين
     price_without_cover = int(math.ceil(base_price / 250.0) * 250)
     price_with_cover = int(math.ceil((base_price + COVER_BINDING_COST) / 250.0) * 250)
     return price_without_cover, price_with_cover
@@ -212,8 +245,6 @@ async def count_pages_for_document(file_path):
                 return len(doc)
         elif ext == '.docx':
             doc = docx.Document(file_path)
-            # DOCX page count is not directly reliable, using a placeholder or trying to estimate.
-            # For simplicity, we'll use 1 if no reliable count is found.
             return doc.core_properties.pages if hasattr(doc.core_properties, 'pages') and doc.core_properties.pages else 1
         elif ext == '.pptx':
             presentation = pptx.Presentation(file_path)
@@ -269,8 +300,6 @@ async def send_to_printer(file_path, printer_name):
         return False, error_message
 
     try:
-        # استخدام ShellExecute لبدء مهمة الطباعة
-        # يجب أن يكون مسار الملف مطلقًا
         absolute_file_path = os.path.abspath(file_path)
         win32api.ShellExecute(0, "print", f'"{absolute_file_path}"', f'"{printer_name}"', ".", 0)
         logger.info(f"Successfully sent '{os.path.basename(file_path)}' to printer '{printer_name}'.")
@@ -312,7 +341,6 @@ async def download_file(message, download_path_base, status_message):
     full_path = os.path.join(download_path_base, file_name)
 
     try:
-        # تهيئة شريط التقدم
         progress_bar_length = 20
         bytes_downloaded = 0
         total_bytes = message.document.size
@@ -323,7 +351,6 @@ async def download_file(message, download_path_base, status_message):
             percent = (current / total) * 100 if total > 0 else 0
             filled_length = int(progress_bar_length * current // total) if total > 0 else 0
             bar = '█' * filled_length + '-' * (progress_bar_length - filled_length)
-            # استخدام asyncio.create_task لتجنب حظر حلقة الأحداث
             asyncio.create_task(status_message.edit(f"⏳ جارٍ التحميل: [{bar}] {percent:.1f}%"))
 
         await message.download_media(file=full_path, progress_callback=progress_callback)
@@ -345,7 +372,6 @@ async def save_settings():
 
     config = configparser.ConfigParser()
 
-    # قسم TELEGRAM
     config['TELEGRAM'] = {
         'api_id': str(API_ID) if API_ID is not None else '',
         'api_hash': API_HASH if API_HASH is not None else '',
@@ -353,26 +379,22 @@ async def save_settings():
         'printing_group_id': str(PRINTING_GROUP_ID) if PRINTING_GROUP_ID is not None else ''
     }
 
-    # قسم PRINTER
     config['PRINTER'] = {
         'printer_name_1': PRINTER_NAME_1 if PRINTER_NAME_1 is not None else '',
         'printer_name_2': PRINTER_NAME_2 if PRINTER_NAME_2 is not None else ''
     }
 
-    # قسم PRICES
     config['PRICES'] = {
         'price_per_page_lt50': str(PRICE_PER_PAGE_LT50),
         'price_per_page_gte50': str(PRICE_PER_PAGE_GTE50),
         'cover_binding_cost': str(COVER_BINDING_COST)
     }
 
-    # قسم BOT_CONFIG
     config['BOT_CONFIG'] = {
         'custom_auto_reply_message': custom_auto_reply_message,
         'ignored_users': ",".join(map(str, ignored_users)) # حفظها كسلسلة نصية مفصولة بفواصل
     }
     
-    # قسم ADMINS
     config['ADMINS'] = {
         'admin_ids': ",".join(map(str, ADMIN_IDS))
     }
@@ -400,7 +422,6 @@ def load_settings():
     try:
         config.read(SETTINGS_FILE, encoding='utf-8')
 
-        # تحميل قسم TELEGRAM
         api_id_str = config.get('TELEGRAM', 'api_id', fallback=None)
         API_ID = int(api_id_str) if api_id_str and api_id_str.strip().lstrip('-').isdigit() else None
         API_HASH = config.get('TELEGRAM', 'api_hash', fallback=None)
@@ -408,11 +429,9 @@ def load_settings():
         printing_group_id_str = config.get('TELEGRAM', 'printing_group_id', fallback=None)
         PRINTING_GROUP_ID = int(printing_group_id_str) if printing_group_id_str and printing_group_id_str.strip().lstrip('-').isdigit() else None
 
-        # تحميل قسم PRINTER
         PRINTER_NAME_1 = config.get('PRINTER', 'printer_name_1', fallback=None)
         PRINTER_NAME_2 = config.get('PRINTER', 'printer_name_2', fallback=None)
 
-        # تحميل قسم PRICES
         price_lt50_str = config.get('PRICES', 'price_per_page_lt50', fallback='50')
         PRICE_PER_PAGE_LT50 = int(price_lt50_str) if price_lt50_str and price_lt50_str.strip().lstrip('-').isdigit() else 50
         price_gte50_str = config.get('PRICES', 'price_per_page_gte50', fallback='40')
@@ -420,12 +439,10 @@ def load_settings():
         cover_cost_str = config.get('PRICES', 'cover_binding_cost', fallback='500')
         COVER_BINDING_COST = int(cover_cost_str) if cover_cost_str and cover_cost_str.strip().lstrip('-').isdigit() else 500
 
-        # تحميل قسم BOT_CONFIG
         custom_auto_reply_message = config.get('BOT_CONFIG', 'custom_auto_reply_message', fallback="")
         ignored_users_str = config.get('BOT_CONFIG', 'ignored_users', fallback='')
         ignored_users = set(int(uid) for uid in ignored_users_str.split(',') if uid.strip() and uid.strip().lstrip('-').isdigit())
 
-        # تحميل قسم ADMINS
         admin_ids_str = config.get('ADMINS', 'admin_ids', fallback='')
         ADMIN_IDS = set(int(uid) for uid in admin_ids_str.split(',') if uid.strip() and uid.strip().lstrip('-').isdigit())
 
@@ -444,7 +461,6 @@ def create_default_settings():
     global API_ID, API_HASH, SESSION_STRING, PRINTING_GROUP_ID, PRINTER_NAME_1, PRINTER_NAME_2
     global PRICE_PER_PAGE_LT50, PRICE_PER_PAGE_GTE50, COVER_BINDING_COST, custom_auto_reply_message, ignored_users, ADMIN_IDS, owner_id
 
-    # القيم الافتراضية الأصلية (يمكن تعديلها هنا لتكون أكثر منطقية عند الإنشاء)
     API_ID = 16504919
     API_HASH = 'e9ddbc4aa70093979dcc2d20153fba08'
     SESSION_STRING = '1ApWapzMBuxOg0QsYt7P69PuZ8uTaNzZT0EKTRg0ZTMgW2EJi_1NfklhoWENh46h-YkMaib4UqLxb3nREIXX8UX9-9lXxZwMJTqcZqYJJDd6jhpddO4R7Nh65Vt-cE7PP1A3pDv2fYaUCL4vm2CfxyL5C-8-XgrOcclv4bU4QrDFwTbGA6hShF1rJPh1zzDXSblbfcDgGHybECg7rBRfA7YZwBVb1G5vh1Kaya3PQ8f18rdQQaHfslGQAhNDDjg6R4DEAlXVRxNmfrIiUN_K4N_M9m_nUt9N2uGoGtrqyM_qAe9Qn4Sbugf7dKNJDle-TGPBFb0euEiFVKnOelN9oa4R0K245FpQ='
@@ -488,10 +504,8 @@ def get_command_inline_keyboard(command_prefix="."):
         "📚 Files": f"{command_prefix}ملف",
     }
 
-    # ترتيب الأوامر بشكل منطقي أو أبجدي
     sorted_commands = sorted(commands.items(), key=lambda item: item[0])
 
-    # تقسيم الأوامر إلى صفوف، كل صف يحتوي على أمرين على الأكثر
     row = []
     for text, command in sorted_commands:
         row.append(KeyboardButtonCallback(text=text, callback_data=command))
@@ -620,7 +634,6 @@ async def admin_handler(event):
                 try: os.remove(path)
                 except OSError as e: logger.warning(f"فشل حذف الملف المؤقت: {e}")
             else:
-                # تم عرض رسالة الخطأ في download_file
                 pass
         else:
             await event.edit("❌ **يرجى الرد على رسالة تحتوي على ملف لحساب سعره.**")
@@ -645,7 +658,6 @@ async def admin_handler(event):
                 try: os.remove(path)
                 except OSError as e: logger.warning(f"فشل حذف الملف المؤقت: {e}")
             else:
-                # تم عرض رسالة الخطأ في download_file
                 pass
         else:
             await event.edit("❌ **يرجى الرد على رسالة تحتوي على ملف لإرساله إلى الطابعة.**")
@@ -766,7 +778,6 @@ async def admin_handler(event):
         failed_count = 0
         users_to_ignore_after_broadcast = set()
 
-        # نجمع المستخدمين الذين يجب تجاهلهم لاحقًا
         users_to_process = list(all_known_users) # نأخذ نسخة لنتجنب مشاكل التعديل أثناء المرور
         
         for user_id in users_to_process:
@@ -784,7 +795,6 @@ async def admin_handler(event):
             except FloodWaitError as e:
                 logger.warning(f"Flood wait error during broadcast: {e.seconds}s. Waiting...")
                 await asyncio.sleep(e.seconds + 2)
-                # إعادة المحاولة يمكن أن تكون معقدة، نكتفي بتسجيل الفشل
                 failed_count += 1
                 users_to_ignore_after_broadcast.add(user_id)
             except Exception as e:
@@ -856,16 +866,13 @@ async def admin_handler(event):
 @client.on(events.CallbackQuery())
 async def callback_handler(event):
     """معالجة تفاعلات الأزرار الشفافة."""
-    # إذا كان المستخدم مسؤولاً، عالج أوامر الإدارة
     if is_admin(event):
         command = event.data.decode('utf-8')
 
-        # أوامر تعديل الأسعار (تتطلب تفاعلاً إضافياً)
         if command.startswith(".t") and len(command) > 2 and command[2:].isdigit():
             await event.answer("أدخل القيمة الجديدة:")
             await event.edit(f"أدخل القيمة الجديدة لـ `{command}`:")
             
-            # تعريف دالة معالج مؤقت للرد على الرسائل للحصول على القيمة الجديدة
             async def wait_for_new_price(e):
                 if e.sender_id == event.sender_id and e.text and e.text.strip().lstrip('-').isdigit():
                     new_value = int(e.text)
@@ -882,19 +889,15 @@ async def callback_handler(event):
                         COVER_BINDING_COST = new_value
                         await e.reply(f"✅ تم تحديث تكلفة التجليد إلى: `{COVER_BINDING_COST}`")
                     await save_settings()
-                    # العودة إلى لوحة الإعدادات بعد التعديل
                     await send_settings_menu(e)
                     return True # تم التعامل مع الرسالة
                 return False
             
-            # ربط المعالج المؤقت وتشغيله
             client.add_event_handler(wait_for_new_price, events.NewMessage(incoming=True, from_users=event.sender_id))
             return # الخروج من هنا لأننا ننتظر إدخال المستخدم
 
-        # أوامر بسيطة يتم تنفيذها مباشرة
         if command in [".تفعيل", ".فحص", ".نايم", ".كاعد", ".سجل", ".طباعة", ".سعر", ".تيست", ".اذاعة", ".ملف"]:
             await event.delete() # حذف الزر الذي تم الضغط عليه
-            # إرسال الأمر كرسالة نصية ليتم معالجته بواسطة admin_handler
             await event.client.send_message(event.chat_id, f"{command}")
             return
 
@@ -902,12 +905,10 @@ async def callback_handler(event):
             await send_settings_menu(event) # عرض قائمة الإعدادات
             return
 
-        # إذا كان الأمر يتعلق بإدارة الملفات، نستدعي المعالج الخاص بها
         if command == ".ملف":
             await handle_file_management_command(event)
             return
 
-    # إذا لم يكن المستخدم مسؤولاً، أو كان الأمر غير مدعوم للأزرار
     await event.answer("لا تملك الصلاحية لاستخدام هذا الزر.")
 
 async def send_settings_menu(event):
@@ -931,28 +932,22 @@ async def handle_user_message(event):
     """معالجة الرسائل الواردة من المستخدمين العاديين."""
     sender_id = event.sender_id
 
-    # تجاهل المستخدمين الموجودين في القائمة المتجاهلة
     if sender_id in ignored_users:
         return
 
-    # إضافة المستخدم إلى قائمة المستخدمين المعروفين
     all_known_users.add(sender_id)
 
-    # الرد التلقائي في وضع النوم
     if is_sleeping:
         await event.reply(custom_auto_reply_message or "⏳ أنا نائم حاليًا. سأعود قريبًا.")
         return
 
-    # معالجة الملفات المستلمة
     if event.document:
-        # إرسال رسالة الحالة قبل البدء بالتحميل
         status_message = await event.reply("⏳ **جاري استلام ومعالجة الملف. سنقوم بإبلاغك بالتكلفة قريباً.**")
         path = await download_file(event, DOWNLOAD_PATH, status_message)
         if path:
             pages = await count_pages_for_document(path)
             if pages > 0:
                 price_no_cover, price_with_cover = await calculate_price(pages)
-                # إرسال النتائج كرسالة جديدة (لا يعدل الرسالة السابقة "جاري التحميل")
                 await event.client.send_message(event.chat_id,
                     f"📄 **تم استلام الملف بنجاح.**\n"
                     f"**اسم الملف:** `{os.path.basename(path)}`\n"
@@ -966,10 +961,8 @@ async def handle_user_message(event):
             try: os.remove(path)
             except OSError as e: logger.warning(f"فشل حذف الملف المؤقت: {e}")
         else:
-            # تم عرض رسالة الخطأ في download_file
             pass
     else:
-        # الرد على الرسائل النصية العادية أو أي شيء آخر غير المستندات
         user_name = get_user_full_name(await event.get_sender())
         await event.reply(DEFAULT_WELCOME_MESSAGE.format(user_name=user_name))
 
@@ -978,7 +971,6 @@ async def handle_user_message(event):
 async def handle_file_management_command(event):
     """يعالج أمر .ملف لإدارة الملفات المخصصة."""
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    # البحث عن ملفات .py في نفس المسار، باستثناء الملف الرئيسي وملف الإعدادات
     python_files = [
         f for f in os.listdir(current_dir) 
         if f.endswith('.py') 
@@ -991,21 +983,9 @@ async def handle_file_management_command(event):
                          "✅ **سيتم إنشاء ملف جديد باسم `new_script.py`.**\n"
                          "➡️ **يرجى نقل الكود الخاص بك إليه ثم إرسال الأمر `.ملف` مرة أخرى.**")
         try:
-            # إنشاء ملف جديد مع تعليقات توضيحية
             new_script_content = """# هذا ملف كود مخصص لتشغيله عبر البوت الرئيسي.
-# يمكنك استيراد 'client', 'asyncio', 'API_ID', 'SESSION_STRING' وغيرها من المتغيرات الأساسية من بيئة البوت.
-# مثال:
-# async def run_custom_script(event, client, API_ID, SESSION_STRING, owner_id, ADMIN_IDS):
-#     await event.reply("Hello from custom script!")
-#     # هنا ضع الكود الخاص بك
 
-# إذا كنت تستخدم متغيرات البيئة التي يمررها البوت الرئيسي، يمكنك الوصول إليها هكذا:
-# import os
-# owner_id = int(os.environ.get('OWNER_ID', 0))
-# print(f"Owner ID: {owner_id}")
 
-# للدخول إلى وضع التفاعل مع البوت الرئيسي بشكل فعال، قد تحتاج إلى التعامل مع الرسائل الواردة أو إرسالها بنفسك.
-# لكن بشكل عام، يُفضل أن تقوم هذه الملفات بمهام محددة وإرجاع قيم أو طباعة نتائج.
 """
             with open(os.path.join(current_dir, "new_script.py"), "w", encoding='utf-8') as f:
                 f.write(new_script_content)
@@ -1014,7 +994,6 @@ async def handle_file_management_command(event):
             logger.error(f"فشل إنشاء ملف new_script.py: {e}")
         return
 
-    # بناء قائمة الملفات مع أرقام
     file_list_message = "📜 **ملفات البايثون المخصصة المتاحة:**\n\n"
     for i, filename in enumerate(python_files):
         file_list_message += f"{i+1}. `{filename}`\n"
@@ -1022,7 +1001,6 @@ async def handle_file_management_command(event):
 
     await event.edit(file_list_message)
 
-    # انتظار اختيار المستخدم
     async def wait_for_file_choice(e):
         if e.sender_id == event.sender_id and e.text and e.text.strip().isdigit():
             choice = int(e.text)
@@ -1032,7 +1010,6 @@ async def handle_file_management_command(event):
                 return True # تم التعامل مع الرسالة
         return False
 
-    # ربط معالج مؤقت للرد على الرسائل لاستقبال رقم الملف
     client.add_event_handler(wait_for_file_choice, events.NewMessage(incoming=True, from_users=event.sender_id))
 
 async def execute_custom_script(event, script_name):
@@ -1040,7 +1017,6 @@ async def execute_custom_script(event, script_name):
     script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), script_name)
     await event.edit(f"🚀 **جاري تشغيل الملف `{script_name}`...**")
     try:
-        # تعريف متغيرات البيئة التي يمكن للملف المخصص الوصول إليها
         env_vars = {
             "API_ID": str(API_ID) if API_ID is not None else '',
             "API_HASH": API_HASH if API_HASH is not None else '',
@@ -1054,8 +1030,6 @@ async def execute_custom_script(event, script_name):
             "SCRIPT_NAME": script_name,
         }
 
-        # تشغيل الملف المخصص في subprocess
-        # sys.executable يضمن استخدام نفس مترجم بايثون
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             script_path,
@@ -1069,7 +1043,6 @@ async def execute_custom_script(event, script_name):
         stderr_decoded = stderr.decode('utf-8', errors='ignore').strip()
 
         if process.returncode == 0:
-            # إذا كان الإخراج فارغاً، نعرض رسالة نجاح بسيطة
             if not stdout_decoded and not stderr_decoded:
                 await event.edit(f"✅ **تم تشغيل الملف `{script_name}` بنجاح.** (لا يوجد إخراج مرئي)")
             else:
@@ -1092,15 +1065,12 @@ async def main():
     """الدالة الرئيسية لبدء تشغيل البوت."""
     global owner_id, bot_start_time, ADMIN_IDS
 
-    # تحميل الإعدادات أولاً والتأكد من صلاحيتها
     if not load_settings():
         logger.error("فشل تحميل الإعدادات من config.ini. قد تكون بعض القيم غير صحيحة. سيتم استخدام القيم الافتراضية حيثما أمكن.")
-        # إذا فشل تحميل الإعدادات، قد نحتاج إلى الخروج إذا كانت البيانات الأساسية مفقودة
         if not all([API_ID, API_HASH, SESSION_STRING]):
             print("\n!!! ERROR: Critical Telegram credentials (API ID, API HASH, SESSION_STRING) are missing or invalid in config.ini. Bot cannot start. !!!")
             sys.exit(1)
 
-    # التحقق من أن البيانات الأساسية موجودة وصحيحة بعد محاولة التحميل
     if not all([API_ID, API_HASH, SESSION_STRING]):
         print("\n!!! ERROR: Telegram API credentials are not configured correctly. Please check config.ini. !!!")
         logger.critical("Telegram API credentials are not configured correctly. Bot cannot start.")
@@ -1123,6 +1093,24 @@ async def main():
 
     @client.on(events.NewMessage)
     async def welcome(event):
+        if event.is_private:
+            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
+        elif event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+
+    await client.run_until_disconnected()
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
+        if event.is_private:
+            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
+        elif event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+
+    await client.run_until_disconnected()
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
         if event.is_group:
             await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
         elif event.is_private:
@@ -1159,6 +1147,24 @@ async def main():
 
     @client.on(events.NewMessage)
     async def welcome(event):
+        if event.is_private:
+            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
+        elif event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+
+    await client.run_until_disconnected()
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
+        if event.is_private:
+            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
+        elif event.is_group:
+            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
+
+    await client.run_until_disconnected()
+
+    @client.on(events.NewMessage)
+    async def welcome(event):
         if event.is_group:
             await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
         elif event.is_private:
@@ -1179,7 +1185,6 @@ async def main():
 # --- تشغيل الدالة ---
 asyncio.run(main())
 
-    # التأكد من وجود مجلد التنزيلات
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 BOT_DOWNLOAD_PATH = os.path.join(BASE_PATH, "Bot_Downloads")
 asyncio.run(main())
@@ -1189,6 +1194,5 @@ except KeyboardInterrupt:
     logger.info("تم إيقاف سورس المصطفى يدوياً.")
 except Exception as e:
     logger.critical(f"💥 فشل سورس المصطفى في البدء بسبب خطأ غير متوقع: {e}", exc_info=True)
-    # إبقاء نافذة الكونسول مفتوحة لعرض الأخطاء
     print("\nPress Enter to exit...")
     input()
