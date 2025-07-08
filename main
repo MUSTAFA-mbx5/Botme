@@ -1,0 +1,1140 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# ==================================================================================
+# ===   سورس المصطفى - v63 (Configurable, Feature-Rich, Bug-Fixed with correct imports) ===
+# ==================================================================================
+# --- 1. استيراد المكتبات الأساسية ---
+import logging
+
+logger = logging.getLogger("سورس المصطفى")
+logger.setLevel(logging.INFO)
+
+stream_handler = logging.StreamHandler()
+logger.addHandler(stream_handler)
+import os
+import sys
+import asyncio
+import logging
+import traceback
+import math
+import random
+import json
+import configparser  # لاستخدام ملف config.ini
+from datetime import datetime, timedelta, time 
+from telethon import events
+import time
+import io
+# import shutil # تم الاحتفاظ بها احتياطياً لوظائف مستقبلية
+# import zipfile # لم يتم استخدامه في الوظائف الحالية
+# import base64 # لم يتم استخدامه في الوظائف الحالية
+# import glob # لم يتم استخدامه في الوظائف الحالية
+# import re # لم يتم استخدامه في الوظائف الحالية
+
+try:
+    import fitz  # PyMuPDF
+except ImportError:
+    print("!!! ERROR: PyMuPDF (fitz) not found. Please install it: pip install PyMuPDF")
+    sys.exit(1)
+
+try:
+    import docx  # python-docx
+except ImportError:
+    print("!!! ERROR: python-docx not found. Please install it: pip install python-docx")
+    sys.exit(1)
+
+try:
+    import pptx  # python-pptx
+except ImportError:
+    print("!!! ERROR: python-pptx not found. Please install it: pip install python-pptx")
+    sys.exit(1)
+
+# --- إنشاء المسار والملف إذا لم يكن موجوداً ---
+ENV_FOLDER = os.path.join("D:\\MyTelegramBot", "evn")
+ENV_FILE_PATH = os.path.join(ENV_FOLDER, "env_variables.ini")
+
+# تأكد من وجود المجلد
+if not os.path.exists(ENV_FOLDER):
+    os.makedirs(ENV_FOLDER)
+
+# إذا الملف غير موجود، أنشئه مع قيم افتراضية
+if not os.path.exists(ENV_FILE_PATH):
+    config = configparser.ConfigParser()
+    config["TELEGRAM"] = {
+        "API_ID": "",
+        "API_HASH": "",
+        "SESSION_STRING": "",
+        "PRINTING_GROUP_ID": "",
+        "PRINTER_NAME_1": "",
+        "PRINTER_NAME_2": ""
+    }
+    with open(ENV_FILE_PATH, "w", encoding="utf-8") as configfile:
+        config.write(configfile)
+    print(f"[✅] تم إنشاء ملف المتغيرات: {ENV_FILE_PATH}")
+else:
+    print(f"[ℹ️] تم العثور على ملف المتغيرات: {ENV_FILE_PATH}")
+# --- قراءة البيانات من env_variables.ini ---
+config = configparser.ConfigParser()
+config.read(ENV_FILE_PATH, encoding="utf-8")
+
+# --- استيراد المتغيرات ---
+API_ID = int(config.get("TELEGRAM", "API_ID", fallback="0"))
+API_HASH = config.get("TELEGRAM", "API_HASH", fallback="")
+SESSION_STRING = config.get("TELEGRAM", "SESSION_STRING", fallback="")
+PRINTING_GROUP_ID = config.get("TELEGRAM", "PRINTING_GROUP_ID", fallback="")
+PRINTER_NAME_1 = config.get("TELEGRAM", "PRINTER_NAME_1", fallback="")
+PRINTER_NAME_2 = config.get("TELEGRAM", "PRINTER_NAME_2", fallback="")
+# --- تعريف الكائن client ---
+from telethon import TelegramClient
+from telethon.sessions import StringSession
+
+async def main():
+    client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+    await client.start()
+    me = await client.get_me()
+    owner_id = me.id
+    bot_start_time = datetime.now()
+    logger.info(f"✅ البوت يعمل الآن كـ {me.first_name} [{me.id}]")
+    await client.run_until_disconnected()
+
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())
+
+# --- الآن يمكن استخدامه بشكل آمن ---
+async def is_admin(event):
+    if not event.is_group:
+        return False
+    participants = await event.client.get_participants(event.chat_id, filter=ChannelParticipantsAdmins) # pyright: ignore[reportUndefinedVariable]
+    return any(user.id == event.sender_id for user in participants)
+async def handler(event):
+    pass
+# --- متغيرات حالة البوت والبيانات المؤقتة ---
+is_sleeping = False # حالة البوت (نائم / مستيقظ)
+user_prices = {} # لتخزين أسعار المستخدمين المؤقتة
+user_status_messages = {} # لتخزين رسائل حالة المستخدمين
+user_last_interaction_time = {} # لتخزين وقت آخر تفاعل لكل مستخدم
+ignored_users = set() # لتخزين معرفات المستخدمين الذين تم تجاهلهم
+bot_id = None # لتخزين معرف البوت بعد تسجيل الدخول
+global_daily_total_collected = 0 # متغير لتجميع الإحصائيات اليومية
+bot_start_time = None # لتسجيل وقت بدء تشغيل البوت
+user_confirmation_state = {} # لتتبع حالات التأكيد للمستخدمين
+pending_print_jobs = {} # لتتبع طلبات الطباعة المعلقة
+all_known_users = set() # لتخزين جميع المستخدمين الذين تفاعلوا مع البوت
+owner_id = None # لتخزين معرف مالك البوت
+ADMIN_IDS = set() # لتخزين معرفات المسؤولين
+
+# --- أسعار الطباعة ---
+PRICE_PER_PAGE_LT50 = 50 # سعر الصفحة لأقل من 50 صفحة
+PRICE_PER_PAGE_GTE50 = 40 # سعر الصفحة لـ 50 صفحة أو أكثر
+COVER_BINDING_COST = 500 # تكلفة التجليد الأساسية
+
+# --- قوالب الرسائل المستخدمة في البوت ---
+DEFAULT_WELCOME_MESSAGE = "👋 أهلاً بك {user_name} في بوت سورس المصطفى! أرسل لي ملف PDF, DOCX, أو PPTX وسأقوم بحساب السعر لك."
+
+CUMULATIVE_TOTAL_MESSAGE_TEMPLATE = (
+    "📊 المجموع الكلي للملفات المرسلة حتى الآن:\n"
+    "بدون جلاد: {total_base} دينار\n"
+    "مع جلاد: {total_cover} دينار"
+)
+
+ORDER_COMPLETION_MESSAGE_USER = (
+    "✅ تم إكمال طلبك بنجاح.\n"
+    "يرجى استلامه أو طلب توصيل مع ذكر المعلومات التالية:\n"
+    "- الاسم:\n"
+    "- رقم الهاتف:\n"
+    "- أقرب نقطة دالة:\n\n"
+    "شكرًا لاختيارنا."
+)
+
+# --- كلمات تستخدم لتأكيد الطلب ---
+KEYWORDS_CONFIRM = [
+    "نعم", "اي", "أجل", "موافق", "موافقة", "yes", "ok",
+    "confirm", "yep", "yeah", "تمام", "اوكي", "وك", "اوك", "تم"
+]
+
+# --- كلمات تستخدم لإلغاء الطلب ---
+KEYWORDS_CANCEL = [
+    "لا", "كلا", "ارفض", "no", "cancel", "nope", "الغاء"
+]
+
+# --- 6. الوظائف المساعدة ووظائف الطباعة ---
+
+def is_admin(event):
+    """التحقق مما إذا كان مرسل الحدث هو مسؤول."""
+    return event.sender_id in ADMIN_IDS
+
+def create_progress_bar(percentage):
+    """ينشئ شريط تقدم نصي جميل."""
+    percentage = max(0, min(100, percentage))
+    filled_length = int(percentage / 10)
+    bar = '█' * filled_length + '-' * (10 - filled_length)
+    return f"[{bar}] {percentage:.1f}%"
+
+def calculate_price(pages_count):
+    """حساب السعر بناءً على عدد الصفحات والأسعار المحددة."""
+    price_per_page = PRICE_PER_PAGE_LT50 if pages_count < 50 else PRICE_PER_PAGE_GTE50
+    base_price = pages_count * price_per_page
+    # التقريب لأعلى لأقرب 250 وحدة لكلا السعرين
+    price_without_cover = int(math.ceil(base_price / 250.0) * 250)
+    price_with_cover = int(math.ceil((base_price + COVER_BINDING_COST) / 250.0) * 250)
+    return price_without_cover, price_with_cover
+
+async def count_pages_for_document(file_path):
+    """
+    عد الصفحات في ملف معين (PDF, DOCX, PPTX).
+    يرجع عدد الصفحات أو 0 إذا لم يمكن تحديده.
+    """
+    if not os.path.exists(file_path):
+        logger.error(f"الملف غير موجود لحساب الصفحات: {file_path}")
+        return 0
+
+    ext = os.path.splitext(file_path)[1].lower()
+    try:
+        if ext == '.pdf':
+            with fitz.open(file_path) as doc:
+                return len(doc)
+        elif ext == '.docx':
+            doc = docx.Document(file_path)
+            # DOCX page count is not directly reliable, using a placeholder or trying to estimate.
+            # For simplicity, we'll use 1 if no reliable count is found.
+            return doc.core_properties.pages if hasattr(doc.core_properties, 'pages') and doc.core_properties.pages else 1
+        elif ext == '.pptx':
+            presentation = pptx.Presentation(file_path)
+            return len(presentation.slides)
+        else:
+            logger.warning(f"Unsupported file extension for page count: {ext}")
+            return 0
+    except Exception as e:
+        logger.error(f"خطأ في حساب الصفحات للملف '{os.path.basename(file_path)}': {e}")
+        return 0
+
+def get_available_printers():
+    """يعيد قائمة بأسماء الطابعات المتاحة على النظام."""
+    if not WINDOWS_PRINTING_ENABLED:
+        return ["Simulated_Printer"]
+    try:
+        printers = [p[2] for p in win32print.EnumPrinters(2)]
+        return printers
+    except Exception as e:
+        logger.error(f"Failed to list printers: {e}")
+        return []
+
+def get_ready_printer():
+    """يفحص الطابعات المحددة ويعيد اسم أول طابعة جاهزة."""
+    if not WINDOWS_PRINTING_ENABLED:
+        logger.warning("Printing is simulated. Cannot get real printer status.")
+        return "Simulated_Printer" # اسم طابعة محاكاة
+
+    available_printers = get_available_printers()
+    printers_to_check = [p for p in [PRINTER_NAME_1, PRINTER_NAME_2] if p and p in available_printers]
+
+    for printer_name in printers_to_check:
+        try:
+            handle = win32print.OpenPrinter(printer_name)
+            status = win32print.GetPrinter(handle, 2)['Status']
+            win32print.ClosePrinter(handle)
+            if status == 0: # 0 يعني جاهزة
+                logger.info(f"Printer '{printer_name}' is ready.")
+                return printer_name
+        except Exception as e:
+            logger.error(f"Could not check status for printer '{printer_name}': {e}")
+    return None # لا توجد طابعة جاهزة من القائمة المحددة
+
+async def send_to_printer(file_path, printer_name):
+    """يرسل الملف إلى الطابعة المحددة."""
+    if not WINDOWS_PRINTING_ENABLED:
+        logger.info(f"SIMULATING: Printing file '{os.path.basename(file_path)}' to '{printer_name}'.")
+        await asyncio.sleep(15) # محاكاة وقت الطباعة
+        return True, "تمت الطباعة بنجاح (محاكاة)."
+    if not os.path.exists(file_path):
+        error_message = f"الملف غير موجود في المسار المحدد: {file_path}"
+        logger.error(error_message)
+        return False, error_message
+
+    try:
+        # استخدام ShellExecute لبدء مهمة الطباعة
+        # يجب أن يكون مسار الملف مطلقًا
+        absolute_file_path = os.path.abspath(file_path)
+        win32api.ShellExecute(0, "print", f'"{absolute_file_path}"', f'"{printer_name}"', ".", 0)
+        logger.info(f"Successfully sent '{os.path.basename(file_path)}' to printer '{printer_name}'.")
+        await asyncio.sleep(10) # انتظار افتراضي بعد إرسال الأمر
+        return True, f"تم إرسال الملف بنجاح إلى طابعة '{printer_name}'."
+    except Exception as e:
+        error_message = f"Failed to print file '{os.path.basename(file_path)}'. Error: {e}"
+        logger.error(error_message)
+        return False, str(e)
+
+async def send_group_notification(message, **kwargs):
+    """يرسل إشعارًا إلى مجموعة المالك."""
+    if PRINTING_GROUP_ID:
+        try:
+            await client.send_message(PRINTING_GROUP_ID, message, **kwargs)
+        except Exception as e:
+            logger.error(f"Failed to send notification to group {PRINTING_GROUP_ID}: {e}")
+    else:
+        logger.warning("PRINTING_GROUP_ID is not set. Skipping group notification.")
+
+async def download_file(message, download_path_base, status_message):
+    """
+    تحميل ملف من رسالة Telegram إلى المسار المحدد. مع عرض شريط التقدم.
+    يرجع المسار الكامل للملف المحمل أو None في حالة الفشل.
+    """
+    if not message or not message.document:
+        await status_message.edit("❌ لم يتم العثور على مستند في الرسالة.")
+        return None
+
+    file_name = None
+    if message.document.attributes:
+        for attr in message.document.attributes:
+            if isinstance(attr, DocumentAttributeFilename):
+                file_name = attr.file_name
+                break
+    if not file_name:
+        file_name = f"unknown_file_{random.randint(1000, 9999)}" # اسم افتراضي إذا لم يوجد
+
+    full_path = os.path.join(download_path_base, file_name)
+
+    try:
+        # تهيئة شريط التقدم
+        progress_bar_length = 20
+        bytes_downloaded = 0
+        total_bytes = message.document.size
+
+        def progress_callback(current, total):
+            nonlocal bytes_downloaded
+            bytes_downloaded = current
+            percent = (current / total) * 100 if total > 0 else 0
+            filled_length = int(progress_bar_length * current // total) if total > 0 else 0
+            bar = '█' * filled_length + '-' * (progress_bar_length - filled_length)
+            # استخدام asyncio.create_task لتجنب حظر حلقة الأحداث
+            asyncio.create_task(status_message.edit(f"⏳ جارٍ التحميل: [{bar}] {percent:.1f}%"))
+
+        await message.download_media(file=full_path, progress_callback=progress_callback)
+        await status_message.edit("✅ اكتمل التحميل.")
+        return full_path
+
+    except FloodWaitError as e:
+        logger.error(f"Flood wait error during download: {e}")
+        await status_message.edit(f"❌ فشل التحميل بسبب انتظار: {e.seconds} ثانية.")
+        return None
+    except Exception as e:
+        logger.error(f"خطأ أثناء تحميل الملف: {e}")
+        await status_message.edit(f"❌ فشل تحميل الملف: {e}")
+        return None
+
+async def save_settings():
+    """حفظ الإعدادات الحالية للبوت في ملف config.ini."""
+    global PRICE_PER_PAGE_LT50, PRICE_PER_PAGE_GTE50, COVER_BINDING_COST, custom_auto_reply_message, ignored_users, ADMIN_IDS
+
+    config = configparser.ConfigParser()
+
+    # قسم TELEGRAM
+    config['TELEGRAM'] = {
+        'api_id': str(API_ID) if API_ID is not None else '',
+        'api_hash': API_HASH if API_HASH is not None else '',
+        'session_string': SESSION_STRING if SESSION_STRING is not None else '',
+        'printing_group_id': str(PRINTING_GROUP_ID) if PRINTING_GROUP_ID is not None else ''
+    }
+
+    # قسم PRINTER
+    config['PRINTER'] = {
+        'printer_name_1': PRINTER_NAME_1 if PRINTER_NAME_1 is not None else '',
+        'printer_name_2': PRINTER_NAME_2 if PRINTER_NAME_2 is not None else ''
+    }
+
+    # قسم PRICES
+    config['PRICES'] = {
+        'price_per_page_lt50': str(PRICE_PER_PAGE_LT50),
+        'price_per_page_gte50': str(PRICE_PER_PAGE_GTE50),
+        'cover_binding_cost': str(COVER_BINDING_COST)
+    }
+
+    # قسم BOT_CONFIG
+    config['BOT_CONFIG'] = {
+        'custom_auto_reply_message': custom_auto_reply_message,
+        'ignored_users': ",".join(map(str, ignored_users)) # حفظها كسلسلة نصية مفصولة بفواصل
+    }
+    
+    # قسم ADMINS
+    config['ADMINS'] = {
+        'admin_ids': ",".join(map(str, ADMIN_IDS))
+    }
+
+    try:
+        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            config.write(f)
+        logger.info("تم حفظ الإعدادات بنجاح.")
+    except Exception as e:
+        logger.error(f"خطأ أثناء حفظ الإعدادات: {e}")
+
+def load_settings():
+    """تحميل الإعدادات من ملف config.ini."""
+    global API_ID, API_HASH, SESSION_STRING, PRINTING_GROUP_ID, PRINTER_NAME_1, PRINTER_NAME_2
+    global PRICE_PER_PAGE_LT50, PRICE_PER_PAGE_GTE50, COVER_BINDING_COST, custom_auto_reply_message, ignored_users, ADMIN_IDS
+
+    config = configparser.ConfigParser()
+
+    if not os.path.exists(SETTINGS_FILE):
+        logger.warning(f"ملف الإعدادات '{SETTINGS_FILE}' غير موجود. سيتم إنشاؤه بالقيم الافتراضية.")
+        create_default_settings() # إنشاء القيم الافتراضية أولاً
+        save_settings() # ثم حفظها
+        return True # تشير إلى أنه تم إنشاء الملف بنجاح (مع القيم الافتراضية)
+
+    try:
+        config.read(SETTINGS_FILE, encoding='utf-8')
+
+        # تحميل قسم TELEGRAM
+        api_id_str = config.get('TELEGRAM', 'api_id', fallback=None)
+        API_ID = int(api_id_str) if api_id_str and api_id_str.strip().lstrip('-').isdigit() else None
+        API_HASH = config.get('TELEGRAM', 'api_hash', fallback=None)
+        SESSION_STRING = config.get('TELEGRAM', 'session_string', fallback=None)
+        printing_group_id_str = config.get('TELEGRAM', 'printing_group_id', fallback=None)
+        PRINTING_GROUP_ID = int(printing_group_id_str) if printing_group_id_str and printing_group_id_str.strip().lstrip('-').isdigit() else None
+
+        # تحميل قسم PRINTER
+        PRINTER_NAME_1 = config.get('PRINTER', 'printer_name_1', fallback=None)
+        PRINTER_NAME_2 = config.get('PRINTER', 'printer_name_2', fallback=None)
+
+        # تحميل قسم PRICES
+        price_lt50_str = config.get('PRICES', 'price_per_page_lt50', fallback='50')
+        PRICE_PER_PAGE_LT50 = int(price_lt50_str) if price_lt50_str and price_lt50_str.strip().lstrip('-').isdigit() else 50
+        price_gte50_str = config.get('PRICES', 'price_per_page_gte50', fallback='40')
+        PRICE_PER_PAGE_GTE50 = int(price_gte50_str) if price_gte50_str and price_gte50_str.strip().lstrip('-').isdigit() else 40
+        cover_cost_str = config.get('PRICES', 'cover_binding_cost', fallback='500')
+        COVER_BINDING_COST = int(cover_cost_str) if cover_cost_str and cover_cost_str.strip().lstrip('-').isdigit() else 500
+
+        # تحميل قسم BOT_CONFIG
+        custom_auto_reply_message = config.get('BOT_CONFIG', 'custom_auto_reply_message', fallback="")
+        ignored_users_str = config.get('BOT_CONFIG', 'ignored_users', fallback='')
+        ignored_users = set(int(uid) for uid in ignored_users_str.split(',') if uid.strip() and uid.strip().lstrip('-').isdigit())
+
+        # تحميل قسم ADMINS
+        admin_ids_str = config.get('ADMINS', 'admin_ids', fallback='')
+        ADMIN_IDS = set(int(uid) for uid in admin_ids_str.split(',') if uid.strip() and uid.strip().lstrip('-').isdigit())
+
+        logger.info("تم تحميل الإعدادات بنجاح.")
+        return True
+    except (configparser.NoSectionError, configparser.NoOptionError, ValueError) as e:
+        logger.error(f"خطأ في قراءة ملف الإعدادات '{SETTINGS_FILE}': {e}. قد تكون بعض الإعدادات غير صحيحة.")
+        logger.warning("سيتم استخدام القيم الافتراضية لبعض الإعدادات.")
+        return False
+    except Exception as e:
+        logger.critical(f"خطأ فادح غير متوقع أثناء تحميل الإعدادات: {e}", exc_info=True)
+        return False
+
+def create_default_settings():
+    """إنشاء ملف الإعدادات بالقيم الافتراضية إذا لم يكن موجوداً."""
+    global API_ID, API_HASH, SESSION_STRING, PRINTING_GROUP_ID, PRINTER_NAME_1, PRINTER_NAME_2
+    global PRICE_PER_PAGE_LT50, PRICE_PER_PAGE_GTE50, COVER_BINDING_COST, custom_auto_reply_message, ignored_users, ADMIN_IDS, owner_id
+
+    # القيم الافتراضية الأصلية (يمكن تعديلها هنا لتكون أكثر منطقية عند الإنشاء)
+    API_ID = 16504919
+    API_HASH = 'e9ddbc4aa70093979dcc2d20153fba08'
+    SESSION_STRING = '1ApWapzMBuxOg0QsYt7P69PuZ8uTaNzZT0EKTRg0ZTMgW2EJi_1NfklhoWENh46h-YkMaib4UqLxb3nREIXX8UX9-9lXxZwMJTqcZqYJJDd6jhpddO4R7Nh65Vt-cE7PP1A3pDv2fYaUCL4vm2CfxyL5C-8-XgrOcclv4bU4QrDFwTbGA6hShF1rJPh1zzDXSblbfcDgGHybECg7rBRfA7YZwBVb1G5vh1Kaya3PQ8f18rdQQaHfslGQAhNDDjg6R4DEAlXVRxNmfrIiUN_K4N_M9m_nUt9N2uGoGtrqyM_qAe9Qn4Sbugf7dKNJDle-TGPBFb0euEiFVKnOelN9oa4R0K245FpQ='
+    PRINTING_GROUP_ID = -1002818366552
+    PRINTER_NAME_1 = "HP PageWide MFP P57750 PCL 6"
+    PRINTER_NAME_2 = "HP LaserJet MFP M130fw"
+    PRICE_PER_PAGE_LT50 = 50
+    PRICE_PER_PAGE_GTE50 = 40
+    COVER_BINDING_COST = 500
+    custom_auto_reply_message = ""
+    ignored_users = set()
+    ADMIN_IDS = set() # ستتم إضافة المالك لاحقًا بعد بدء التشغيل
+
+    logger.info("تم إنشاء ملف الإعدادات الافتراضي.")
+
+def get_user_full_name(user):
+    """الحصول على الاسم الكامل للمستخدم بشكل منظم."""
+    if user.first_name and user.last_name:
+        return f"{user.first_name} {user.last_name}"
+    elif user.first_name:
+        return user.first_name
+    elif user.username:
+        return f"@{user.username}"
+    else:
+        return f"User_{user.id}"
+
+def get_command_inline_keyboard(command_prefix="."):
+    """إنشاء لوحة مفاتيح بأوامر البوت مع شرح."""
+    keyboard = []
+    commands = {
+        "📊 Stats": f"{command_prefix}تفعيل",
+        "🖨️ Print": f"{command_prefix}طباعة",
+        "💰 Price": f"{command_prefix}سعر",
+        "💡 Test Print": f"{command_prefix}تيست",
+        "😴 Sleep": f"{command_prefix}نايم",
+        "☀️ Wake Up": f"{command_prefix}كاعد",
+        "🚫 Ignore": f"{command_prefix}سماح",
+        "✅ Unignore": f"{command_prefix}الغاء",
+        "📢 Broadcast": f"{command_prefix}اذاعة",
+        "⚙️ Settings": f"{command_prefix}اعدادات",
+        "📚 Files": f"{command_prefix}ملف",
+    }
+
+    # ترتيب الأوامر بشكل منطقي أو أبجدي
+    sorted_commands = sorted(commands.items(), key=lambda item: item[0])
+
+    # تقسيم الأوامر إلى صفوف، كل صف يحتوي على أمرين على الأكثر
+    row = []
+    for text, command in sorted_commands:
+        row.append(KeyboardButtonCallback(text=text, callback_data=command))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row: # إضافة الصف الأخير إذا كان يحتوي على عنصر واحد
+        keyboard.append(row)
+
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+# --- 7. معالج الأوامر الإدارية ---
+async def is_admin(event):
+    if not event.is_group:
+        return False
+    participants = await event.client.get_participants(event.chat_id, filter=ChannelParticipantsAdmins)
+    return any(user.id == event.sender_id for user in participants)
+async def admin_handler(event):
+    """معالجة جميع الأوامر التي تبدأ بـ '.' من قبل المسؤولين."""
+    global is_sleeping, custom_auto_reply_message, PRICE_PER_PAGE_LT50, PRICE_PER_PAGE_GTE50, COVER_BINDING_COST, ignored_users, ADMIN_IDS
+
+    command_full = event.pattern_match.group(1).strip()
+    parts = command_full.split(maxsplit=1)
+    command = parts[0].lower()
+    args = parts[1] if len(parts) > 1 else None
+
+    # --- أمر المساعدة الرئيسي ---
+    if command == "م" or command == "مساعدة":
+        help_message = "**مرحباً بك في قائمة أوامر سورس المصطفى!**\n\n"
+        help_message += "**📊 إحصائيات وحالة سورس المصطفى:**\n"
+        help_message += "  - `.تفعيل`: عرض حالة سورس المصطفى الحالية.\n"
+        help_message += "  - `.فحص`: فحص حالة الاتصال والطابعات.\n"
+        help_message += "  - `.نايم`: تفعيل وضع النوم (رد تلقائي).\n"
+        help_message += "  - `.كاعد`: إلغاء تفعيل وضع النوم.\n"
+        help_message += "  - `.تنايم [نص الرسالة]`: تفعيل وضع النوم مع رسالة تلقائية مخصصة.\n"
+        help_message += "  - `.سجل`: عرض إحصائيات سورس المصطفى (المستخدمون. الأسعار).\n\n"
+
+        help_message += "**🖨️ أوامر الطباعة والتسعير:**\n"
+        help_message += "  - `.سعر` (مع الرد على ملف): حساب تكلفة طباعة الملف.\n"
+        help_message += "  - `.طباعة` (مع الرد على ملف): إرسال الملف المحدد إلى الطابعة.\n"
+        help_message += "  - `.تيست`: إرسال صفحة اختبار للطابعة.\n"
+        help_message += "  - `.ت1 [رقم]`: تعديل سعر الصفحة (أقل من 50).\n"
+        help_message += "  - `.ت2 [رقم]`: تعديل سعر الصفحة (50 صفحة أو أكثر).\n"
+        help_message += "  - `.ت3 [رقم]`: تعديل تكلفة التجليد.\n\n"
+
+        help_message += "**👤 إدارة المستخدمين والمسؤولين:**\n"
+        help_message += "  - `.سماح` (مع الرد على رسالة): منع المستخدم من الردود التلقائية.\n"
+        help_message += "  - `.الغاء` (مع الرد على رسالة): إلغاء منع المستخدم من الردود التلقائية.\n"
+        help_message += "  - `.الغاءك`: إلغاء منع جميع المستخدمين المتجاهَلين.\n"
+        help_message += "  - `.الغاء_ايدي [معرف المستخدم]`: إلغاء تجاهل مستخدم معين عبر معرفه.\n"
+        help_message += "  - `.ك` (مع الرد على رسالة): إخطار المستخدم بأن طلبه جاهز للاستلام.\n"
+        help_message += "  - `.اذاعة` (مع الرد على رسالة): إرسال رسالة لجميع المستخدمين المعروفين.\n"
+        help_message += "  - `.اضف_ادمن [معرف المستخدم]`: إضافة مسؤول جديد.\n"
+        help_message += "  - `.حذف_ادمن [معرف المستخدم]`: إزالة مسؤول.\n\n"
+
+        help_message += "**🛠️ أوامر أخرى:**\n"
+        help_message += "  - `.حلو` (مع الرد على رسالة): حفظ الرسالة في رسائلك المحفوظة.\n"
+        help_message += "  - `.اعدادات`: عرض خيارات تعديل الأسعار.\n"
+        help_message += "  - `.ملف`: إدارة الملفات المخصصة وتشغيلها.\n"
+
+        await event.edit(help_message)
+        return
+
+    # --- أوامر حالة البوت والتحكم ---
+    elif command == "تفعيل":
+        uptime_delta = datetime.now() - bot_start_time
+        uptime_str = str(timedelta(seconds=int(uptime_delta.total_seconds()))).split('.')[0]
+        stats_msg = (
+            f"**✅ سورس المصطفى يعمل بشكل طبيعي**\n"
+            f"**⏳ مدة التشغيل:** `{uptime_str}`\n"
+            f"**💤 وضع النوم:** `{'مُفعّل' if is_sleeping else 'مُعطّل'}`\n"
+            f"**👥 المستخدمون المعروفون:** `{len(all_known_users)}` | **المتجاهلون:** `{len(ignored_users)}`\n"
+            f"**👑 المسؤولون:** `{len(ADMIN_IDS)}`"
+        )
+        await event.edit(stats_msg)
+
+    elif command == "فحص":
+        await event.edit("🩺 **جاري فحص حالة سورس المصطفى...**")
+        printers_list = get_available_printers()
+        p1_status = "✅" if PRINTER_NAME_1 and PRINTER_NAME_1 in printers_list else "❌"
+        p2_status = "✅" if PRINTER_NAME_2 and PRINTER_NAME_2 in printers_list else "❌"
+        status_report = (
+            f"**📊 تقرير فحص:**\n"
+            f"- **اتصال سورس المصطفى:** ✅\n"
+            f"- **نظام الطباعة (ويندوز):** `{'✅' if WINDOWS_PRINTING_ENABLED else '⛔'}`\n"
+            f"- **الطابعة الأولى (`{PRINTER_NAME_1 or 'غير محددة'}`):** {p1_status}\n"
+            f"- **الطابعة الثانية (`{PRINTER_NAME_2 or 'غير محددة'}`):** {p2_status}"
+        )
+        await event.edit(status_report)
+
+    elif command == "نايم":
+        is_sleeping = True
+        await event.edit("🌙 **تم تفعيل وضع النوم. سيتم الرد برسالة تلقائية.**")
+
+    elif command == "كاعد":
+        is_sleeping = False
+        await event.edit("☀️ **تم إلغاء وضع النوم. سورس المصطفى جاهز لتلقي الطلبات.**")
+
+    elif command == "تنايم":
+        if not args:
+            await event.edit("⚠️ **استخدام خاطئ.**\nلتفعيل وضع النوم برد مخصص. استخدم: `.تنايم نص الرسالة التلقائية`")
+            return
+        is_sleeping = True
+        custom_auto_reply_message = args
+        await save_settings()
+        await event.edit(f"🌙 **تم تفعيل وضع النوم برد مخصص:**\n`{args}`")
+
+    # --- أوامر الطباعة والتسعير ---
+    elif command == "سعر" and event.is_reply:
+        reply_msg = await event.get_reply_message()
+        if reply_msg and reply_msg.document:
+            await event.edit("⏳ **جاري معالجة الملف لحساب التكلفة...**")
+            status_message = await event.get_reply_to_message() # الرد على رسالة البوت الأصلية
+            path = await download_file(reply_msg, DOWNLOAD_PATH, status_message)
+            if path:
+                pages = await count_pages_for_document(path)
+                if pages > 0:
+                    price_no_cover, price_with_cover = await calculate_price(pages)
+                    await status_message.edit(
+                        f"📄 **الملف يحتوي على {pages} صفحة.**\n"
+                        f"💰 **التكلفة (بدون تجليد):** `{price_no_cover}`\n"
+                        f"💰 **التكلفة (مع تجليد):** `{price_with_cover}`"
+                    )
+                else:
+                    await status_message.edit("❌ **لم أتمكن من حساب عدد الصفحات للملف.**")
+                try: os.remove(path)
+                except OSError as e: logger.warning(f"فشل حذف الملف المؤقت: {e}")
+            else:
+                # تم عرض رسالة الخطأ في download_file
+                pass
+        else:
+            await event.edit("❌ **يرجى الرد على رسالة تحتوي على ملف لحساب سعره.**")
+
+    elif command == "طباعة" and event.is_reply:
+        reply_msg = await event.get_reply_message()
+        if reply_msg and reply_msg.document:
+            await event.edit("⏳ **جاري تحميل الملف وإرساله إلى الطابعة...**")
+            status_message = await event.get_reply_to_message() # الرد على رسالة البوت الأصلية
+            path = await download_file(reply_msg, DOWNLOAD_PATH, status_message)
+            if path:
+                printer_to_use = get_ready_printer()
+                if printer_to_use:
+                    success, error_msg = await asyncio.to_thread(send_to_printer, path, printer_to_use)
+                    if success:
+                        await status_message.edit(f"✅ **تم إرسال الملف '{os.path.basename(path)}' إلى الطابعة بنجاح!**")
+                        await send_group_notification(f"✅ تم إرسال ملف '{os.path.basename(path)}' إلى الطابعة '{printer_to_use}' للاستخدام.")
+                    else:
+                        await status_message.edit(f"❌ **فشل إرسال الملف إلى الطابعة:**\n`{error_msg}`\n**نصيحة:** تأكد من أن الطابعة تعمل وأن تعريفاتها محدثة.")
+                else:
+                    await status_message.edit("❌ **لا توجد طابعة جاهزة متاحة حاليًا.**")
+                try: os.remove(path)
+                except OSError as e: logger.warning(f"فشل حذف الملف المؤقت: {e}")
+            else:
+                # تم عرض رسالة الخطأ في download_file
+                pass
+        else:
+            await event.edit("❌ **يرجى الرد على رسالة تحتوي على ملف لإرساله إلى الطابعة.**")
+
+    elif command == "تيست":
+        await event.edit("⏳ **جاري إرسال صفحة اختبار إلى الطابعة...**")
+        test_file_path = os.path.join(DOWNLOAD_PATH, "test_print_file.txt")
+        try:
+            with open(test_file_path, "w", encoding='utf-8') as f:
+                f.write("--- صفحة اختبار من سورس المصطفى ---\n\n")
+                f.write(f"وقت الإرسال: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+            printer_to_use = get_ready_printer()
+            if printer_to_use:
+                success, error_msg = await asyncio.to_thread(send_to_printer, test_file_path, printer_to_use)
+                if success:
+                    await event.edit(f"✅ **تم إرسال صفحة الاختبار بنجاح إلى `{printer_to_use}`!**")
+                else:
+                    await event.edit(f"❌ **فشل إرسال صفحة الاختبار:**\n`{error_msg}`")
+            else:
+                await event.edit("❌ **لا توجد طابعة جاهزة متاحة حاليًا لإرسال صفحة الاختبار.**")
+        finally:
+            if os.path.exists(test_file_path):
+                try: os.remove(test_file_path)
+                except OSError as e: logger.warning(f"فشل حذف ملف الاختبار: {e}")
+
+    elif command in ["ت1", "ت2", "ت3"]:
+        if not args or not args.strip().lstrip('-').isdigit():
+            await event.edit("⚠️ **استخدام خاطئ.**\n- استخدم `.ت1 [القيمة]` لتحديث سعر الصفحة لـ أقل من 50.\n- استخدم `.ت2 [القيمة]` لتحديث سعر الصفحة لـ 50 أو أكثر.\n- استخدم `.ت3 [رقم]` لتحديث تكلفة التجليد.")
+            return
+
+        value = int(args)
+        if command == "ت1":
+            PRICE_PER_PAGE_LT50 = value
+            await event.edit(f"✅ **تم تحديث سعر الصفحة (أقل من 50 صفحة) إلى:** `{PRICE_PER_PAGE_LT50}`")
+        elif command == "ت2":
+            PRICE_PER_PAGE_GTE50 = value
+            await event.edit(f"✅ **تم تحديث سعر الصفحة (50 صفحة أو أكثر) إلى:** `{PRICE_PER_PAGE_GTE50}`")
+        elif command == "ت3":
+            COVER_BINDING_COST = value
+            await event.edit(f"✅ **تم تحديث تكلفة التجليد إلى:** `{COVER_BINDING_COST}`")
+
+        await save_settings()
+
+    # --- أوامر إدارة المستخدمين والمسؤولين ---
+    elif command == "سماح" and event.is_reply:
+        try:
+            user_to_ignore_id = (await event.get_reply_message()).sender_id
+            if user_to_ignore_id == owner_id:
+                await event.edit("❌ لا يمكنك تجاهل المالك.")
+                return
+            if user_to_ignore_id in ADMIN_IDS:
+                await event.edit("❌ لا يمكنك تجاهل مسؤول آخر.")
+                return
+
+            ignored_users.add(user_to_ignore_id)
+            await save_settings()
+            await event.edit(f"🚫 **تم إضافة المستخدم `{user_to_ignore_id}` إلى قائمة المتجاهَلين (لن يتم الرد التلقائي عليه).**")
+        except Exception as e:
+            await event.edit(f"❌ **لا يمكن الحصول على معرف المستخدم من الرسالة المُرَد عليها:** {e}")
+
+    elif command == "الغاء" and event.is_reply:
+        try:
+            user_to_unignore_id = (await event.get_reply_message()).sender_id
+            if user_to_unignore_id in ignored_users:
+                ignored_users.discard(user_to_unignore_id)
+                await save_settings()
+                await event.edit(f"✅ **تم إزالة المستخدم `{user_to_unignore_id}` من قائمة المتجاهَلين.**")
+            else:
+                await event.edit(f"❓ المستخدم `{user_to_unignore_id}` غير موجود في قائمة المتجاهَلين.")
+        except Exception as e:
+            await event.edit(f"❌ **لا يمكن الحصول على معرف المستخدم من الرسالة المُرَد عليها:** {e}")
+
+    elif command == "الغاءك":
+        if not ignored_users:
+            await event.edit("ℹ️ قائمة المتجاهَلين فارغة حاليًا.")
+            return
+        ignored_list_str = ", ".join(map(str, ignored_users))
+        ignored_users.clear()
+        await save_settings()
+        await event.edit(f"✅ **تم إزالة جميع المستخدمين من قائمة المتجاهَلين.**\n**المستخدمون الذين تمت إزالتهم:** `{ignored_list_str}`")
+
+    elif command == "الغاء_ايدي":
+        if not args or not args.strip().lstrip('-').isdigit():
+            await event.edit("⚠️ **استخدام خاطئ.**\nاستخدم `.الغاء_ايدي [معرف المستخدم]` لإزالة مستخدم معين من قائمة التجاهل.")
+            return
+        user_id_to_remove = int(args)
+        if user_id_to_remove in ignored_users:
+            ignored_users.discard(user_id_to_remove)
+            await save_settings()
+            await event.edit(f"✅ **تم إزالة المستخدم ذو المعرف `{user_id_to_remove}` من قائمة المتجاهَلين.**")
+        else:
+            await event.edit(f"❓ المستخدم ذو المعرف `{user_id_to_remove}` غير موجود في قائمة المتجاهَلين.")
+
+    elif command == "ك" and event.is_reply:
+        try:
+            user_to_notify_id = (await event.get_reply_message()).sender_id
+            if user_to_notify_id == owner_id or user_to_notify_id in ADMIN_IDS:
+                await event.edit("❌ لا يمكنك إرسال رسالة جاهزية لمسؤول آخر بهذه الطريقة.")
+                return
+            await client.send_message(user_to_notify_id, "✅ **مرحباً! طلبك جاهز للاستلام من المكتبة.**")
+            await event.edit("👍 **تم إرسال رسالة الإكمال للمستخدم.**")
+        except PeerIdInvalidError:
+            await event.edit("❌ **معرف المستخدم غير صالح أو غير موجود.**")
+        except UserIsBlockedError:
+            await event.edit("❌ **المستخدم قام بحظر البوت.**")
+        except Exception as e:
+            await event.edit(f"❌ **حدث خطأ أثناء إرسال الرسالة:** {e}")
+
+    elif command == "اذاعة" and event.is_reply:
+        msg_to_broadcast = await event.get_reply_message()
+        if not msg_to_broadcast:
+            await event.edit("❌ **يرجى الرد على الرسالة التي تريد إذاعتها.**")
+            return
+
+        await event.edit(f"📣 **جاري بدء الإذاعة لـ {len(all_known_users)} مستخدم معروف...**")
+        sent_count = 0
+        failed_count = 0
+        users_to_ignore_after_broadcast = set()
+
+        # نجمع المستخدمين الذين يجب تجاهلهم لاحقًا
+        users_to_process = list(all_known_users) # نأخذ نسخة لنتجنب مشاكل التعديل أثناء المرور
+        
+        for user_id in users_to_process:
+            if user_id == owner_id or user_id in ADMIN_IDS: continue # تجنب إرسال رسائل للمسؤولين
+            try:
+                await client.send_message(user_id, msg_to_broadcast)
+                sent_count += 1
+                await asyncio.sleep(0.1) # لتجنب تجاوز الحدود
+            except PeerIdInvalidError:
+                failed_count += 1
+                users_to_ignore_after_broadcast.add(user_id)
+            except UserIsBlockedError:
+                failed_count += 1
+                users_to_ignore_after_broadcast.add(user_id)
+            except FloodWaitError as e:
+                logger.warning(f"Flood wait error during broadcast: {e.seconds}s. Waiting...")
+                await asyncio.sleep(e.seconds + 2)
+                # إعادة المحاولة يمكن أن تكون معقدة، نكتفي بتسجيل الفشل
+                failed_count += 1
+                users_to_ignore_after_broadcast.add(user_id)
+            except Exception as e:
+                logger.error(f"خطأ في الإذاعة للمستخدم {user_id}: {e}")
+                failed_count += 1
+                users_to_ignore_after_broadcast.add(user_id)
+
+        ignored_users.update(users_to_ignore_after_broadcast)
+        if users_to_ignore_after_broadcast:
+            await save_settings()
+
+        await event.edit(f"✅ **اكتملت الإذاعة!**\n"
+                         f"✔️ تم الإرسال بنجاح إلى: `{sent_count}` مستخدم.\n"
+                         f"❌ فشلت الإذاعة لـ: `{failed_count}` مستخدم (قد يتم تجاهلهم تلقائيًا).")
+
+    # --- أوامر الإحصائيات ---
+    elif command == "سجل":
+        stats_msg = (
+            f"**📊 تقرير الإحصائيات:**\n"
+            f"- **إجمالي المستخدمين المعروفين:** `{len(all_known_users)}`\n"
+            f"- **المستخدمون المتجاهَلون:** `{len(ignored_users)}`\n"
+            f"- **رسوم الصفحة <50:** `{PRICE_PER_PAGE_LT50}`\n"
+            f"- **رسوم الصفحة >=50:** `{PRICE_PER_PAGE_GTE50}`\n"
+            f"- **تكلفة التجليد:** `{COVER_BINDING_COST}`\n"
+            f"- **المسؤولون المضافون:** `{len(ADMIN_IDS - {owner_id})}`"
+        )
+        await event.edit(stats_msg)
+
+    # --- أوامر تعديل الأسعار (مع لوحة مفاتيح) ---
+    elif command == "اعدادات":
+        await send_settings_menu(event) # استدعاء دالة إرسال قائمة الإعدادات
+
+    # --- أوامر إدارة المسؤولين ---
+    elif command == "اضف_ادمن" and args:
+        if not args.strip().lstrip('-').isdigit():
+            await event.edit("⚠️ **استخدام خاطئ.**\nاستخدم `.اضف_ادمن [معرف المستخدم]` لإضافة مسؤول جديد.")
+            return
+        new_admin_id = int(args)
+        if new_admin_id == owner_id:
+            await event.edit("❌ المالك هو المسؤول الرئيسي بالفعل.")
+            return
+        if new_admin_id in ADMIN_IDS:
+            await event.edit(f"✅ المستخدم `{new_admin_id}` هو بالفعل مسؤول.")
+            return
+        ADMIN_IDS.add(new_admin_id)
+        await save_settings() # حفظ التغييرات
+        await event.edit(f"✅ **تم إضافة المستخدم `{new_admin_id}` كمسؤول.**")
+
+    elif command == "حذف_ادمن" and args:
+        if not args.strip().lstrip('-').isdigit():
+            await event.edit("⚠️ **استخدام خاطئ.**\nاستخدم `.حذف_ادمن [معرف المستخدم]` لإزالة مسؤول.")
+            return
+        admin_id_to_remove = int(args)
+        if admin_id_to_remove == owner_id:
+            await event.edit("❌ لا يمكن حذف المالك.")
+            return
+        if admin_id_to_remove in ADMIN_IDS:
+            ADMIN_IDS.discard(admin_id_to_remove)
+            await save_settings() # حفظ التغييرات
+            await event.edit(f"✅ **تم إزالة المسؤول `{admin_id_to_remove}`.**")
+        else:
+            await event.edit(f"❓ المستخدم ذو المعرف `{admin_id_to_remove}` ليس مسؤولاً حاليًا.")
+
+    # --- أمر إدارة الملفات المخصصة ---
+    elif command == "ملف":
+        await handle_file_management_command(event)
+
+# --- معالج تفاعل الأزرار (Callback Query) ---
+@client.on(events.CallbackQuery())
+async def callback_handler(event):
+    """معالجة تفاعلات الأزرار الشفافة."""
+    # إذا كان المستخدم مسؤولاً، عالج أوامر الإدارة
+    if is_admin(event):
+        command = event.data.decode('utf-8')
+
+        # أوامر تعديل الأسعار (تتطلب تفاعلاً إضافياً)
+        if command.startswith(".t") and len(command) > 2 and command[2:].isdigit():
+            await event.answer("أدخل القيمة الجديدة:")
+            await event.edit(f"أدخل القيمة الجديدة لـ `{command}`:")
+            
+            # تعريف دالة معالج مؤقت للرد على الرسائل للحصول على القيمة الجديدة
+            async def wait_for_new_price(e):
+                if e.sender_id == event.sender_id and e.text and e.text.strip().lstrip('-').isdigit():
+                    new_value = int(e.text)
+                    if command == ".t1":
+                        global PRICE_PER_PAGE_LT50
+                        PRICE_PER_PAGE_LT50 = new_value
+                        await e.reply(f"✅ تم تحديث سعر الصفحة (أقل من 50 صفحة) إلى: `{PRICE_PER_PAGE_LT50}`")
+                    elif command == ".t2":
+                        global PRICE_PER_PAGE_GTE50
+                        PRICE_PER_PAGE_GTE50 = new_value
+                        await e.reply(f"✅ تم تحديث سعر الصفحة (50 صفحة أو أكثر) إلى: `{PRICE_PER_PAGE_GTE50}`")
+                    elif command == ".t3":
+                        global COVER_BINDING_COST
+                        COVER_BINDING_COST = new_value
+                        await e.reply(f"✅ تم تحديث تكلفة التجليد إلى: `{COVER_BINDING_COST}`")
+                    await save_settings()
+                    # العودة إلى لوحة الإعدادات بعد التعديل
+                    await send_settings_menu(e)
+                    return True # تم التعامل مع الرسالة
+                return False
+            
+            # ربط المعالج المؤقت وتشغيله
+            client.add_event_handler(wait_for_new_price, events.NewMessage(incoming=True, from_users=event.sender_id))
+            return # الخروج من هنا لأننا ننتظر إدخال المستخدم
+
+        # أوامر بسيطة يتم تنفيذها مباشرة
+        if command in [".تفعيل", ".فحص", ".نايم", ".كاعد", ".سجل", ".طباعة", ".سعر", ".تيست", ".اذاعة", ".ملف"]:
+            await event.delete() # حذف الزر الذي تم الضغط عليه
+            # إرسال الأمر كرسالة نصية ليتم معالجته بواسطة admin_handler
+            await event.client.send_message(event.chat_id, f"{command}")
+            return
+
+        if command == ".اعدادات":
+            await send_settings_menu(event) # عرض قائمة الإعدادات
+            return
+
+        # إذا كان الأمر يتعلق بإدارة الملفات، نستدعي المعالج الخاص بها
+        if command == ".ملف":
+            await handle_file_management_command(event)
+            return
+
+    # إذا لم يكن المستخدم مسؤولاً، أو كان الأمر غير مدعوم للأزرار
+    await event.answer("لا تملك الصلاحية لاستخدام هذا الزر.")
+
+async def send_settings_menu(event):
+    """إرسال قائمة إعدادات الأسعار كأزرار شفافة."""
+    await event.edit("⚙️ **قائمة إعدادات الأسعار:**\n\n"
+                     f"1.  **سعر الصفحة (<50):** `{PRICE_PER_PAGE_LT50}`\n"
+                     f"2.  **سعر الصفحة (>=50):** `{PRICE_PER_PAGE_GTE50}`\n"
+                     f"3.  **تكلفة التجليد:** `{COVER_BINDING_COST}`\n\n"
+                     "اضغط على الرقم لتعديل القيمة المطلوبة.")
+    keyboard = [
+        [KeyboardButtonCallback(text="تعديل سعر 1", callback_data=".t1"),
+         KeyboardButtonCallback(text="تعديل سعر 2", callback_data=".t2")],
+        [KeyboardButtonCallback(text="تعديل التجليد", callback_data=".t3")],
+        [KeyboardButtonCallback(text="العودة للقائمة الرئيسية", callback_data=".مساعدة")] # زر للعودة إلى قائمة المساعدة
+    ]
+    await event.edit(reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
+# --- 8. معالج الرسائل الواردة من المستخدمين العاديين ---
+@client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private and not e.out and not is_admin(e)))
+async def handle_user_message(event):
+    """معالجة الرسائل الواردة من المستخدمين العاديين."""
+    sender_id = event.sender_id
+
+    # تجاهل المستخدمين الموجودين في القائمة المتجاهلة
+    if sender_id in ignored_users:
+        return
+
+    # إضافة المستخدم إلى قائمة المستخدمين المعروفين
+    all_known_users.add(sender_id)
+
+    # الرد التلقائي في وضع النوم
+    if is_sleeping:
+        await event.reply(custom_auto_reply_message or "⏳ أنا نائم حاليًا. سأعود قريبًا.")
+        return
+
+    # معالجة الملفات المستلمة
+    if event.document:
+        # إرسال رسالة الحالة قبل البدء بالتحميل
+        status_message = await event.reply("⏳ **جاري استلام ومعالجة الملف. سنقوم بإبلاغك بالتكلفة قريباً.**")
+        path = await download_file(event, DOWNLOAD_PATH, status_message)
+        if path:
+            pages = await count_pages_for_document(path)
+            if pages > 0:
+                price_no_cover, price_with_cover = await calculate_price(pages)
+                # إرسال النتائج كرسالة جديدة (لا يعدل الرسالة السابقة "جاري التحميل")
+                await event.client.send_message(event.chat_id,
+                    f"📄 **تم استلام الملف بنجاح.**\n"
+                    f"**اسم الملف:** `{os.path.basename(path)}`\n"
+                    f"**عدد الصفحات:** {pages}\n"
+                    f"💰 **التكلفة (بدون تجليد):** `{price_no_cover}`\n"
+                    f"💰 **التكلفة (مع تجليد):** `{price_with_cover}`\n\n"
+                    f"يرجى تأكيد طلبك."
+                )
+            else:
+                await event.client.send_message(event.chat_id, "❌ **عذراً. لم نتمكن من تحديد عدد الصفحات لهذا الملف.**")
+            try: os.remove(path)
+            except OSError as e: logger.warning(f"فشل حذف الملف المؤقت: {e}")
+        else:
+            # تم عرض رسالة الخطأ في download_file
+            pass
+    else:
+        # الرد على الرسائل النصية العادية أو أي شيء آخر غير المستندات
+        user_name = get_user_full_name(await event.get_sender())
+        await event.reply(DEFAULT_WELCOME_MESSAGE.format(user_name=user_name))
+
+
+# --- 9. دالة إدارة الملفات المخصصة ---
+async def handle_file_management_command(event):
+    """يعالج أمر .ملف لإدارة الملفات المخصصة."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # البحث عن ملفات .py في نفس المسار، باستثناء الملف الرئيسي وملف الإعدادات
+    python_files = [
+        f for f in os.listdir(current_dir) 
+        if f.endswith('.py') 
+        and f != os.path.basename(__file__) 
+        and f != 'config.ini' # استبعاد ملف الإعدادات
+    ]
+
+    if not python_files:
+        await event.edit("ℹ️ **لا توجد ملفات بايثون مخصصة في هذا المجلد.**\n"
+                         "✅ **سيتم إنشاء ملف جديد باسم `new_script.py`.**\n"
+                         "➡️ **يرجى نقل الكود الخاص بك إليه ثم إرسال الأمر `.ملف` مرة أخرى.**")
+        try:
+            # إنشاء ملف جديد مع تعليقات توضيحية
+            new_script_content = """# هذا ملف كود مخصص لتشغيله عبر البوت الرئيسي.
+# يمكنك استيراد 'client', 'asyncio', 'API_ID', 'SESSION_STRING' وغيرها من المتغيرات الأساسية من بيئة البوت.
+# مثال:
+# async def run_custom_script(event, client, API_ID, SESSION_STRING, owner_id, ADMIN_IDS):
+#     await event.reply("Hello from custom script!")
+#     # هنا ضع الكود الخاص بك
+
+# إذا كنت تستخدم متغيرات البيئة التي يمررها البوت الرئيسي، يمكنك الوصول إليها هكذا:
+# import os
+# owner_id = int(os.environ.get('OWNER_ID', 0))
+# print(f"Owner ID: {owner_id}")
+
+# للدخول إلى وضع التفاعل مع البوت الرئيسي بشكل فعال، قد تحتاج إلى التعامل مع الرسائل الواردة أو إرسالها بنفسك.
+# لكن بشكل عام، يُفضل أن تقوم هذه الملفات بمهام محددة وإرجاع قيم أو طباعة نتائج.
+"""
+            with open(os.path.join(current_dir, "new_script.py"), "w", encoding='utf-8') as f:
+                f.write(new_script_content)
+            logger.info("تم إنشاء ملف new_script.py بنجاح.")
+        except Exception as e:
+            logger.error(f"فشل إنشاء ملف new_script.py: {e}")
+        return
+
+    # بناء قائمة الملفات مع أرقام
+    file_list_message = "📜 **ملفات البايثون المخصصة المتاحة:**\n\n"
+    for i, filename in enumerate(python_files):
+        file_list_message += f"{i+1}. `{filename}`\n"
+    file_list_message += "\n**أرسل رقم الملف الذي تريد تشغيله.**"
+
+    await event.edit(file_list_message)
+
+    # انتظار اختيار المستخدم
+    async def wait_for_file_choice(e):
+        if e.sender_id == event.sender_id and e.text and e.text.strip().isdigit():
+            choice = int(e.text)
+            if 1 <= choice <= len(python_files):
+                selected_file = python_files[choice - 1]
+                await execute_custom_script(e, selected_file)
+                return True # تم التعامل مع الرسالة
+        return False
+
+    # ربط معالج مؤقت للرد على الرسائل لاستقبال رقم الملف
+    client.add_event_handler(wait_for_file_choice, events.NewMessage(incoming=True, from_users=event.sender_id))
+
+async def execute_custom_script(event, script_name):
+    """يشغل ملف بايثون مخصص في عملية منفصلة."""
+    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), script_name)
+    await event.edit(f"🚀 **جاري تشغيل الملف `{script_name}`...**")
+    try:
+        # تعريف متغيرات البيئة التي يمكن للملف المخصص الوصول إليها
+        env_vars = {
+            "API_ID": str(API_ID) if API_ID is not None else '',
+            "API_HASH": API_HASH if API_HASH is not None else '',
+            "SESSION_STRING": SESSION_STRING if SESSION_STRING is not None else '',
+            "PRINTING_GROUP_ID": str(PRINTING_GROUP_ID) if PRINTING_GROUP_ID is not None else '',
+            "ADMIN_IDS": ",".join(map(str, ADMIN_IDS)), # تمرير قائمة المسؤولين كمتغير بيئة
+            "OWNER_ID": str(owner_id) if owner_id is not None else '',
+            "BOT_DOWNLOAD_PATH": BOT_DOWNLOAD_PATH,
+            "SETTINGS_FILE": SETTINGS_FILE,
+            "CURRENT_USER_ID": str(event.sender_id), # معرف المستخدم الذي استدعى الملف
+            "SCRIPT_NAME": script_name,
+        }
+
+        # تشغيل الملف المخصص في subprocess
+        # sys.executable يضمن استخدام نفس مترجم بايثون
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            script_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env={**os.environ, **env_vars} # دمج متغيرات البيئة الحالية مع الجديدة
+        )
+        stdout, stderr = await process.communicate()
+
+        stdout_decoded = stdout.decode('utf-8', errors='ignore').strip()
+        stderr_decoded = stderr.decode('utf-8', errors='ignore').strip()
+
+        if process.returncode == 0:
+            # إذا كان الإخراج فارغاً، نعرض رسالة نجاح بسيطة
+            if not stdout_decoded and not stderr_decoded:
+                await event.edit(f"✅ **تم تشغيل الملف `{script_name}` بنجاح.** (لا يوجد إخراج مرئي)")
+            else:
+                await event.edit(f"✅ **تم تشغيل الملف `{script_name}` بنجاح.**\n"
+                                 f"**الإخراج القياسي (stdout):**\n```\n{stdout_decoded}\n```")
+        else:
+            await event.edit(f"❌ **فشل تشغيل الملف `{script_name}`.**\n"
+                             f"**رمز الخروج:** {process.returncode}\n"
+                             f"**الأخطاء (stderr):**\n```\n{stderr_decoded}\n```"
+                             f"\n**الإخراج القياسي (stdout):**\n```\n{stdout_decoded}\n```")
+
+    except FileNotFoundError:
+        await event.edit(f"❌ **الملف `{script_name}` غير موجود في المسار الصحيح.**")
+    except Exception as e:
+        logger.error(f"خطأ أثناء تشغيل الملف المخصص '{script_name}': {e}", exc_info=True)
+        await event.edit(f"❌ **حدث خطأ أثناء تشغيل الملف `{script_name}`:**\n`{e}`")
+
+# --- 10. دالة التشغيل الرئيسية ---
+async def main():
+    """الدالة الرئيسية لبدء تشغيل البوت."""
+    global owner_id, bot_start_time, ADMIN_IDS
+
+    # تحميل الإعدادات أولاً والتأكد من صلاحيتها
+    if not load_settings():
+        logger.error("فشل تحميل الإعدادات من config.ini. قد تكون بعض القيم غير صحيحة. سيتم استخدام القيم الافتراضية حيثما أمكن.")
+        # إذا فشل تحميل الإعدادات، قد نحتاج إلى الخروج إذا كانت البيانات الأساسية مفقودة
+        if not all([API_ID, API_HASH, SESSION_STRING]):
+            print("\n!!! ERROR: Critical Telegram credentials (API ID, API HASH, SESSION_STRING) are missing or invalid in config.ini. Bot cannot start. !!!")
+            sys.exit(1)
+
+    # التحقق من أن البيانات الأساسية موجودة وصحيحة بعد محاولة التحميل
+    if not all([API_ID, API_HASH, SESSION_STRING]):
+        print("\n!!! ERROR: Telegram API credentials are not configured correctly. Please check config.ini. !!!")
+        logger.critical("Telegram API credentials are not configured correctly. Bot cannot start.")
+        sys.exit(1)
+
+# --- تهيئة عميل سورس المصطفى ---
+from telethon import TelegramClient
+from telethon.sessions import StringSession
+import asyncio
+from datetime import datetime
+
+client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+
+async def main():
+    logger.info("⏳ بدء تشغيل سورس المصطفى...")
+    await client.start()
+    me = await client.get_me()
+    owner_id = me.id
+    bot_start_time = datetime.now()
+    logger.info(f"✅ البوت يعمل الآن كـ {me.first_name} [{me.id}]")
+
+# --- تشغيل الدالة ---
+asyncio.run(main())
+# --- تهيئة عميل سورس المصطفى ---
+from telethon import TelegramClient
+from telethon.sessions import StringSession
+import asyncio
+from datetime import datetime
+
+client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+
+async def main():
+    logger.info("⏳ بدء تشغيل سورس المصطفى...")
+    await client.start()
+    me = await client.get_me()
+    owner_id = me.id
+    bot_start_time = datetime.now()
+    logger.info(f"✅ البوت يعمل الآن كـ {me.first_name} [{me.id}]")
+
+# --- تشغيل الدالة ---
+asyncio.run(main())
+
+    # التأكد من وجود مجلد التنزيلات
+BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+BOT_DOWNLOAD_PATH = os.path.join(BASE_PATH, "Bot_Downloads")
+loop = asyncio.get_event_loop()
+try:
+    loop.run_until_complete(main())
+except KeyboardInterrupt:
+    logger.info("تم إيقاف سورس المصطفى يدوياً.")
+except Exception as e:
+    logger.critical(f"💥 فشل سورس المصطفى في البدء بسبب خطأ غير متوقع: {e}", exc_info=True)
+    # إبقاء نافذة الكونسول مفتوحة لعرض الأخطاء
+    print("\nPress Enter to exit...")
+    input()
