@@ -9,6 +9,7 @@ logger.setLevel(logging.INFO)
 
 stream_handler = logging.StreamHandler()
 logger.addHandler(stream_handler)
+from multiprocessing.connection import Client
 import os
 import sys
 import asyncio
@@ -97,59 +98,8 @@ async def main():
 
     await client.run_until_disconnected()
 
-    @client.on(events.NewMessage)
-    async def welcome(event):
-        if event.is_private:
-            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
-        elif event.is_group:
-            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
-
-    await client.run_until_disconnected()
-
-    @client.on(events.NewMessage)
-    async def welcome(event):
-        if event.is_private:
-            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
-        elif event.is_group:
-            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
-
-    await client.run_until_disconnected()
-
-    @client.on(events.NewMessage)
-    async def welcome(event):
-        if event.is_private:
-            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
-        elif event.is_group:
-            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
-
-    await client.run_until_disconnected()
-
-    @client.on(events.NewMessage)
-    async def welcome(event):
-        if event.is_group:
-            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
-        elif event.is_private:
-            await event.reply("👋 أهلاً بك! سورس المصطفى يعمل بنجاح.")
-
-    await client.run_until_disconnected()
-
-async def main():
-    await client.start()
-    me = await client.get_me()
-    owner_id = me.id
-    bot_start_time = datetime.now()
-    logger.info(f"✅ البوت يعمل الآن كـ {me.first_name} [{me.id}]")
-
-    @client.on(events.NewMessage)
-    async def welcome(event):
-        if event.is_private:
-            await event.reply("👋 أهلاً بك، سورس المصطفى يعمل بنجاح.")
-        elif event.is_group:
-            await event.reply("👋 سورس المصطفى يعمل داخل القروب!")
-    await client.run_until_disconnected()
-
 asyncio.run(main())
-loop.run_until_complete(main())
+
 
 # --- الآن يمكن استخدامه بشكل آمن ---
 async def is_admin(event):
